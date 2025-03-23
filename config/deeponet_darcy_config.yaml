@@ -1,0 +1,50 @@
+default:
+
+  arch: 'deeponet'
+
+  data:
+    n_train: 10000
+    batch_size: 16
+    test_resolutions: [128]
+    n_tests: [1000]
+    test_batch_sizes: [16]
+    train_resolution: 128
+
+  deeponet:
+    train_resolution: 128 
+    in_channels: 1
+    data_channels: 1
+    out_channels: 1
+    hidden_channels: 64
+    branch_layers: [256, 256, 256, 256, 128]
+    trunk_layers: [256, 256, 256, 256, 128]
+    positional_embedding: 'grid'
+    non_linearity: 'gelu'
+    norm: 'instance_norm'
+    dropout: 0.0
+
+  opt:
+    n_epochs: 100
+    learning_rate: 5e-4
+    training_loss: 'l2'
+    weight_decay: 1e-5
+    amp_autocast: False
+
+    scheduler_T_max: 100
+    scheduler: 'CosineAnnealingLR'
+    eta_min: 1e-6
+
+  wandb:
+    log: true
+    project: 'training'
+    name: deeponet-darcy-128-resolution
+    group: 'deeponet-darcy'
+    entity: null
+    eval_interval: 1
+    log_output: false
+    sweep: false
+
+  distributed:
+    use_distributed: false
+
+  verbose: true 
