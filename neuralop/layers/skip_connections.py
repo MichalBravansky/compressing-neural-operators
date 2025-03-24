@@ -86,7 +86,7 @@ class SoftGating(nn.Module):
         if self.bias is not None:
             return self.weight * x + self.bias
         else:
-            return self.weight * x
+            return self.weight * x.dequantize()
 
 class Flattened1dConv(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size, bias=False):

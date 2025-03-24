@@ -300,7 +300,7 @@ class FNOBlocks(nn.Module):
         if (index < (self.n_layers - 1)):
             x = self.non_linearity(x)
 
-        x = self.channel_mlp[index](x) + x_skip_channel_mlp
+        x = self.channel_mlp[index](x) + x_skip_channel_mlp.dequantize()
 
         if self.norm is not None:
             x = self.norm[self.n_norms * index + 1](x)

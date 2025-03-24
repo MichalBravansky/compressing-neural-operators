@@ -4,7 +4,7 @@ wandb.login()
 
 models_dir = "neuralop/data/datasets/data" 
 artifacts = [
-    # 'ucl-neural-operator/data/foundational-fno-data:v0',  # foundational fno dataset
+    'ucl-neural-operator/data/foundational-fno-data:v0',  # foundational fno dataset
     'ucl-neural-operator/data/foundational-codano-full-data:v0', # foundational codano dataset
 
 ]

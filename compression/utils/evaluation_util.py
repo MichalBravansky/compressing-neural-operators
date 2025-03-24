@@ -14,6 +14,7 @@ from neuralop.utils import prepare_input
 from compression.utils.codano_util import get_grid_displacement
 
 
+
 def evaluate_model(model, 
                    dataloader, 
                    data_processor=None, 
@@ -161,6 +162,20 @@ def evaluate_model(model,
                         for mk, mv in model_input.items():
                             if torch.is_tensor(mv):
                                 clone_dict[mk] = mv.clone()
+                            
+                        if 'x' in clone_dict and len(clone_dict['x'].shape) >= 2:
+                            is_codano = False
+                            
+                            if hasattr(model, 'model'):
+                                inner_model = model.model
+                                is_codano = (hasattr(inner_model, '__class__') and 
+                                             'codano' in str(inner_model.__class__.__name__).lower())
+                            elif 'codano' in str(model.__class__.__name__).lower():
+                                is_codano = True
+                                
+                            if is_codano and 'variable_ids' not in clone_dict:
+                                clone_dict['variable_ids'] = ["a1"]
+                                
                             
                         if 'x' in clone_dict and len(clone_dict['x'].shape) >= 2:
                             is_codano = False
@@ -339,6 +354,13 @@ def compare_models(model1, model2, test_loaders, data_processor, device,
             print("\nRelative increase in error (compressed vs original):")
             print("-"*50)
         results["Comparison"] = {}
+        if verbose:
+            print("\n" + "="*50)
+            print("PERFORMANCE COMPARISON")
+            print("="*50)
+            print("\nRelative increase in error (compressed vs original):")
+            print("-"*50)
+        results["Comparison"] = {}
         for resolution in test_loaders.keys():
             base_results = results[f"{resolution}_base"]
             comp_results = results[f"{resolution}_compressed"]
@@ -354,6 +376,11 @@ def compare_models(model1, model2, test_loaders, data_processor, device,
                     else:
                         speedup = (base_results['runtime'] / comp_results['runtime']) * 100
                     results["Comparison"]["run_time_speed_up"] = speedup
+                    if comp_results['runtime'] == 0:
+                        speedup = 0
+                    else:
+                        speedup = (base_results['runtime'] / comp_results['runtime']) * 100
+                    results["Comparison"]["run_time_speed_up"] = speedup
                     print(f"{resolution}x{resolution} - Runtime Speedup: {speedup:.2f}x")
                 
                 if 'model_size_mb' in base_results and 'model_size_mb' in comp_results:
@@ -364,12 +391,144 @@ def compare_models(model1, model2, test_loaders, data_processor, device,
                 if 'peak_memory_mb' in base_results and 'peak_memory_mb' in comp_results:
                     memory_reduction = (1 - comp_results['peak_memory_mb'] / base_results['peak_memory_mb']) * 100
                     results["Comparison"]["peak_memory_reduction"] = memory_reduction
+                    results["Comparison"]["peak_memory_reduction"] = memory_reduction
                     print(f"{resolution}x{resolution} - Peak Memory Reduction: {memory_reduction:.2f}%")
                 
                 if 'flops' in base_results and 'flops' in comp_results:
                     flops_reduction = (1 - comp_results['flops'] / base_results['flops']) * 100
                     results["Comparison"]["flops_reduction"] = flops_reduction
                     print(f"{resolution}x{resolution} - FLOPs Reduction: {flops_reduction:.2f}%")
+            
+    
+    return results
+
+
+
+def compare_models_hyperparams(model1, model2s, hyperparameters, test_loaders, data_processor, device, 
+                  model1_name="Original Model", model2_name="Compressed Model",
+                  verbose=True, track_performance=False, evaluation_params=None):
+    """Compare performance between two models across different resolutions.
+    
+    Args:
+        model1: First model to evaluate (e.g., original model)
+        model2: Second model to evaluate (e.g., compressed model)
+        test_loaders: Dict of test loaders for different resolutions
+        data_processor: Data processor for the dataset
+        device: Device to run evaluation on
+        model1_name: Name for the first model (default: "Original Model")
+        model2_name: Name for the second model (default: "Compressed Model")
+        verbose: Whether to print detailed results (default: True)
+        track_performance: Whether to track runtime, memory usage and FLOPs (default: False)
+    """
+    results = {}
+    results["Comparison"] = {}
+    resolution, loader = next(iter(test_loaders.items()))
+    results[f"{resolution}_compressed"] = {}
+    if verbose:
+        print("\n" + "="*50)
+        print(f"{model1_name.upper()} EVALUATION")
+        print("="*50)
+    
+    for resolution, loader in test_loaders.items():
+        if verbose:
+            print(f"\nResults on {resolution}x{resolution} resolution")
+            print("-"*30)
+        results[f"{resolution}_base"] = evaluate_model(model1, loader, data_processor, device, 
+                                                     track_performance=track_performance, 
+                                                     evaluation_params=evaluation_params)
+        if verbose:
+            print(f"L2 Loss: {results[f'{resolution}_base']['l2_loss']:.6f}")
+            if track_performance:
+                if 'runtime' in results[f'{resolution}_base']:
+                    print(f"Avg Runtime per batch: {results[f'{resolution}_base']['runtime']*1000:.2f} ms")
+                if 'model_size_mb' in results[f'{resolution}_base']:
+                    print(f"Model Size: {results[f'{resolution}_base']['model_size_mb']:.2f} MB")
+                if 'peak_memory_mb' in results[f'{resolution}_base']:
+                    print(f"Peak Memory Usage: {results[f'{resolution}_base']['peak_memory_mb']:.2f} MB")
+                if 'flops' in results[f'{resolution}_base']:
+                    print(f"FLOPs: {results[f'{resolution}_base']['flops']/1e9:.2f} GFLOPs")
+    
+    for k in range(len(hyperparameters)):
+        hyperparameter = hyperparameters[k]
+        model2 = model2s[k]
+        if verbose:
+            print("\n")
+            print("<"+"-"*50, f"{model2_name.upper()} EVALUATION with hyperparam({str(hyperparameter)})", 50*"-"+">")
+        
+        if hasattr(model2, 'get_compression_stats') and verbose:
+            stats = model2.get_compression_stats()
+            print(f"\nModel sparsity: {stats['sparsity']:.2%}")
+
+            if 'original_size' in stats:
+                print(f"Original size: {stats['original_size']} bytes")
+            if 'quantized_size' in stats:
+                print(f"Quantized size: {stats['quantized_size']} bytes")
+            if 'compression_ratio' in stats:
+                print(f"Compression ratio: {stats['compression_ratio']:.2f}")
+            if 'dyquantized_layers' in stats:
+                print("Quantized layers:")
+                for layer_name in stats['dyquantized_layers']:
+                    print(f" - {layer_name}")
+    
+
+
+        results[f"{resolution}_compressed"] = {}
+        if verbose:
+            print(f"\nResults on {resolution}x{resolution} resolution")
+            print("-"*30)
+        results[f"{resolution}_compressed"][hyperparameter] = evaluate_model(model2, loader, data_processor, device,
+                                                        track_performance=track_performance,
+                                                        evaluation_params=evaluation_params)
+        if verbose:
+            print(f"L2 Loss: {results[f'{resolution}_compressed'][hyperparameter]['l2_loss']:.6f}")
+            if track_performance:
+                if 'runtime' in results[f'{resolution}_compressed'][hyperparameter]:
+                    print(f"Avg Runtime per batch: {results[f'{resolution}_compressed'][hyperparameter]['runtime']*1000:.2f} ms")
+                if 'model_size_mb' in results[f'{resolution}_compressed'][hyperparameter]:
+                    print(f"Model Size: {results[f'{resolution}_compressed'][hyperparameter]['model_size_mb']:.2f} MB")
+                if 'peak_memory_mb' in results[f'{resolution}_compressed'][hyperparameter]:
+                    print(f"Peak Memory Usage: {results[f'{resolution}_compressed'][hyperparameter]['peak_memory_mb']:.2f} MB")
+                if 'flops' in results[f'{resolution}_compressed'][hyperparameter]:
+                    print(f"FLOPs: {results[f'{resolution}_compressed'][hyperparameter]['flops']/1e9:.2f} GFLOPs")
+    
+        if verbose:
+            print("\n" + "="*50)
+            print("PERFORMANCE COMPARISON")
+            print("="*50)
+            print("\nRelative increase in error (compressed vs original):")
+            print("-"*50)
+        results["Comparison"][hyperparameter] = {}
+
+        base_results = results[f"{resolution}_base"]
+        comp_results = results[f"{resolution}_compressed"]
+        l2_change_percentage = (comp_results[hyperparameter]['l2_loss'] / base_results['l2_loss'] - 1) * 100
+        results["Comparison"][hyperparameter]["l2_loss_increase"] = l2_change_percentage
+        print(f"{resolution}x{resolution} - L2: {l2_change_percentage:.2f}%")
+        
+        # Performance comparison if tracking enabled
+        if track_performance:
+            if 'runtime' in base_results and 'runtime' in comp_results[hyperparameter]:
+                if comp_results[hyperparameter]['runtime'] == 0:
+                    speedup = 0
+                else:
+                    speedup = (base_results['runtime'] / comp_results[hyperparameter]['runtime']) * 100
+                results["Comparison"][hyperparameter]["run_time_speed_up"] = speedup
+                print(f"{resolution}x{resolution} - Runtime Speedup: {speedup:.2f}x")
+            
+            if 'model_size_mb' in base_results and 'model_size_mb' in comp_results[hyperparameter]:
+                model_size_reduction = (1 - comp_results[hyperparameter]['model_size_mb'] / base_results['model_size_mb']) * 100
+                results["Comparison"][hyperparameter]["model_size_reduction"] = model_size_reduction
+                print(f"{resolution}x{resolution} - Model Size Reduction: {model_size_reduction:.2f}%")
+            
+            if 'peak_memory_mb' in base_results and 'peak_memory_mb' in comp_results[hyperparameter]:
+                memory_reduction = (1 - comp_results[hyperparameter]['peak_memory_mb'] / base_results['peak_memory_mb']) * 100
+                results["Comparison"][hyperparameter]["peak_memory_reduction"] = memory_reduction
+                print(f"{resolution}x{resolution} - Peak Memory Reduction: {memory_reduction:.2f}%")
+            
+            if 'flops' in base_results and 'flops' in comp_results[hyperparameter]:
+                flops_reduction = (1 - comp_results[hyperparameter]['flops'] / base_results['flops']) * 100
+                results["Comparison"][hyperparameter]["flops_reduction"] = flops_reduction
+                print(f"{resolution}x{resolution} - FLOPs Reduction: {flops_reduction:.2f}%")
             
     
     return results

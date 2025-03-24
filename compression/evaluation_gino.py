@@ -2,6 +2,7 @@ from neuralop import get_model
 import torch
 from compression.magnitude_pruning.global_pruning import GlobalMagnitudePruning
 from compression.LowRank.SVD_LowRank import SVDLowRank
+from compression.UniformQuant.uniform_quant import UniformQuantisation
 from compression.base import CompressedModel
 from neuralop.data.datasets import CarCFDDataset
 from compression.utils import evaluate_model, compare_models
@@ -59,24 +60,6 @@ compare_models(
     model1=gino_model,
     model2=pruned_model,
     test_loaders={'test': test_loader},
-    data_processor=data_processor,
-    device=device
-)
-
-
-dynamic_quant_model = CompressedModel(
-    model=gino_model,
-    compression_technique=lambda model: DynamicQuantization(model),
-    create_replica=True
-)
-dynamic_quant_model = dynamic_quant_model.to(device)
-
-print("\n"*2)
-print("Dynamic Quantization.....")
-compare_models(
-    model1=gino_model,               # The original model (it will be moved to CPU in evaluate_model)
-    model2=dynamic_quant_model,     # The dynamically quantized model
-    test_loaders=test_loaders,
     data_processor=data_processor,
     device=device
 )

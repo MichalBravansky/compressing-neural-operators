@@ -1,21 +1,25 @@
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
-from neuralop.layers.foundation_fno_layers import SpectralConv2d, SpectralConv2dV2  
-from neuralop.layers.spectral_convolution import SpectralConv  
+from neuralop.layers.foundation_fno_layers import SpectralConv2dV2
+from neuralop.layers.spectral_convolution import SpectralConv
 from neuralop.models.deeponet import DeepONet  # for type checking
 
 # For models (like FNO) that require an identity preserving transform interface.
+
+
 class IdentityWithTransform(nn.Module):
     def forward(self, x, **kwargs):
         return x
+
     def transform(self, x, **kwargs):
         return x
 
 # For DeepONet, we define an alternative: instead of fully removing a layer,
 # we want to partially zero-out its weights (using PyTorch pruning).
 # We'll use the built-in pruning function.
-    
+
+
 class GlobalLayerPruning:
     def __init__(self, model):
         self.model = model
@@ -66,18 +70,18 @@ class GlobalLayerPruning:
     def layer_prune(self, prune_ratio=0.2, deeponet_partial=True):
         """
         Prune candidate layers based on an importance score.
-        
+
         - For FNO (and similar models), candidates are selected using the generic search and full layer pruning is applied (replacing the layer with an identity).
         - For DeepONet, if deeponet_partial is True, we apply partial (unstructured) pruning to each candidate layer 
           in the branch and trunk networks using torch.nn.utils.prune.l1_unstructured.
-          
+
           This zeros out a fraction (prune_ratio) of the weights with the smallest magnitudes.
-        
+
         Parameters:
             prune_ratio (float): For FNO, the fraction of candidate layers to fully prune;
                                  for DeepONet, the fraction of weights to zero out in each candidate layer.
             deeponet_partial (bool): Whether to apply partial pruning for DeepONet.
-            
+
         Returns:
             List of names of layers that were pruned.
         """
@@ -89,11 +93,13 @@ class GlobalLayerPruning:
             pruned_names = []
             for name, module in candidate_layers:
                 # Apply partial pruning using l1_unstructured on the weight.
-                prune.l1_unstructured(module, name='weight', amount=prune_ratio)
+                prune.l1_unstructured(
+                    module, name='weight', amount=prune_ratio)
                 # Remove the pruning reparameterization so the pruned weights become permanent.
                 prune.remove(module, 'weight')
                 pruned_names.append(name)
-                print(f"Partially pruned {name} (zeroed out {prune_ratio*100:.1f}% of its weights)")
+                print(
+                    f"Partially pruned {name} (zeroed out {prune_ratio*100:.1f}% of its weights)")
             return pruned_names
         else:
             # Generic full layer pruning.
@@ -125,10 +131,12 @@ class GlobalLayerPruning:
                 for part in parts[:-1]:
                     parent = getattr(parent, part)
                 last_part = parts[-1]
-                dummy = IdentityWithTransform() if hasattr(module, 'transform') else nn.Identity()
+                dummy = IdentityWithTransform() if hasattr(
+                    module, 'transform') else nn.Identity()
                 setattr(parent, last_part, dummy)
             print(f"Pruned layers: {pruned_names}")
             return pruned_names
+
 
 # Demonstration usage for DeepONet.
 if __name__ == "__main__":
@@ -147,13 +155,13 @@ if __name__ == "__main__":
         norm=None,
         dropout=0.0,
     )
-    
+
     print("DeepONet model before partial pruning:")
     print(model)
-    
+
     pruner = GlobalLayerPruning(model)
     pruner.layer_prune(prune_ratio=0.2, deeponet_partial=True)
-    
+
     # Evaluate the pruned DeepONet with dummy data.
     dummy_x = torch.randn(4, 1, 128, 128)  # Input function
     dummy_y = torch.randn(4, 1, 128, 128)  # Coordinate grid

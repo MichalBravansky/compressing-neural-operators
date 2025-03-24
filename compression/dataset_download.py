@@ -1,3 +1,5 @@
+import sys
+sys.path.append("C:\\Users\\ahmed\\UCL-Ibsa-Ahmed\\Year_3\\COMP0030-31\\COMP0031-Model-Compression-on-Neural-Operator")
 from pathlib import Path
 from neuralop.data.datasets.web_utils import download_from_zenodo_record
 data_root = Path("neuralop/data/datasets/data")

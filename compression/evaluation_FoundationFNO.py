@@ -3,6 +3,7 @@ import torch
 from compression.magnitude_pruning.global_pruning import GlobalMagnitudePruning
 from compression.LowRank.SVD_LowRank import SVDLowRank
 from compression.quantization.dynamic_quantization import DynamicQuantization
+from compression.UniformQuant.uniform_quant import UniformQuantisation
 from compression.base import CompressedModel
 from compression.utils.fno_util import FNOYParams
 from neuralop.data.datasets.mixed import get_data_val_test_loader
@@ -81,6 +82,7 @@ for layer_type, count in param_stats.items():
 # )
 
 # lowrank_model = lowrank_model.to(device)
+# lowrank_model = lowrank_model.to(device)
 
 # dynamic_quant_model = CompressedModel(
 #     model=fno_model,
@@ -97,13 +99,12 @@ for layer_type, count in param_stats.items():
 
 # lowrank_model = lowrank_model.to(device)
 
-# dynamic_quant_model = CompressedModel(
-#     model=fno_model,
-#     compression_technique=lambda model: DynamicQuantization(model),
-#     create_replica=True
-# )
-# dynamic_quant_model = dynamic_quant_model.to(device)
-
+dynamic_quant_model = CompressedModel(
+    model=fno_model,
+    compression_technique=lambda model: UniformQuantisation(model , num_bits=8, num_calibration_runs=1),
+    create_replica=True
+)
+dynamic_quant_model = dynamic_quant_model.to(device)
 
 
 # print("\n"*2)
